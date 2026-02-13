@@ -16,6 +16,7 @@ func main() {
 	}
 
 	http.HandleFunc("/ws", websocket.EchoHandler)
+	http.HandleFunc("/notify", websocket.NotifyHandler)
 
 	log.Printf("Starting server on :%s", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
