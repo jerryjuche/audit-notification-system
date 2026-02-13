@@ -8,34 +8,127 @@
     <h1>Audit Notification System</h1>
     <label for="username">Username:</label>
     <input id="username" type="text" placeholder="e.g., jerry">
-    <button onclick="connect()">Connect</button>
+    <button id="toggleButton" onclick="connect()">Connect</button>
     <p id="status">Status: Disconnected</p>
+    <div id="logs"></div> <!-- Debug logs here -->
 
     <script>
         let ws = null;
+        const toggleButton = document.getElementById('toggleButton');
+        const usernameInput = document.getElementById('username');
+        let isManualDisconnect = false; // Flag to skip auto-reconnect on user disconnect
+        let reconnectAttempts = 0; // Counter for backoff
+        const maxBackoff = 30000; // 30s max delay
+        const initialBackoff = 1000; // 1s start
+
+        function logMessage(msg) {
+            const logs = document.getElementById('logs');
+            logs.innerHTML += `<p>${new Date().toLocaleTimeString()}: ${msg}</p>`;
+            console.log(msg);
+        }
+
+        // Function to show notification (using Notification API or fallback to alert)
+        function showNotification(title, body) {
+            if (Notification.permission === 'granted') {
+                new Notification(title, { body: body });
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        new Notification(title, { body: body });
+                    } else {
+                        alert(body);
+                    }
+                });
+            } else {
+                alert(body);
+            }
+        }
 
         function connect() {
-            const username = document.getElementById('username').value;
+            const username = usernameInput.value;
             if (!username) {
                 alert('Enter username');
                 return;
             }
 
-            ws = new WebSocket(`ws://localhost:8080/ws?user=${username}`);
+            // Save to localStorage
+            localStorage.setItem('username', username);
+
+            // Disable input while connected
+            usernameInput.disabled = true;
+
+            logMessage(`Attempting connection for ${username} to ws://localhost:8080/ws?user=${username}`);
+
+            try {
+                ws = new WebSocket(`ws://localhost:8080/ws?user=${username}`);
+            } catch (error) {
+                logMessage('WebSocket creation failed: ' + error.message);
+                usernameInput.disabled = false;
+                return;
+            }
+
             ws.onopen = () => {
                 document.getElementById('status').innerText = 'Status: Connected';
-                console.log('Connected');
+                logMessage('Connected successfully!');
+                // Reset reconnect state
+                reconnectAttempts = 0;
+                isManualDisconnect = false;
+                // Toggle button to Disconnect
+                toggleButton.innerText = 'Disconnect';
+                toggleButton.onclick = disconnect;
             };
+
             ws.onmessage = (event) => {
-                alert(`Notification: ${event.data}`); // Pop-up.
-                console.log('Received:', event.data);
+                showNotification('Audit Notification', event.data);
+                logMessage(`Received: ${event.data}`);
             };
-            ws.onclose = () => {
+
+            ws.onclose = (event) => {
                 document.getElementById('status').innerText = 'Status: Disconnected';
-                console.log('Disconnected');
+                logMessage(`Disconnected (code: ${event.code}, reason: ${event.reason})`);
+                // Reset button and input
+                toggleButton.innerText = 'Connect';
+                toggleButton.onclick = connect;
+                usernameInput.disabled = false;
+                ws = null;
+
+                // Auto-reconnect if not manual disconnect
+                if (!isManualDisconnect) {
+                    const delay = Math.min(initialBackoff * Math.pow(2, reconnectAttempts), maxBackoff);
+                    logMessage(`Reconnecting in ${delay / 1000}s... (attempt ${reconnectAttempts + 1})`);
+                    setTimeout(connect, delay);
+                    reconnectAttempts++;
+                } else {
+                    isManualDisconnect = false; // Reset flag
+                }
             };
-            ws.onerror = (error) => console.error('Error:', error);
+
+            ws.onerror = (error) => {
+                logMessage('Error: ' + (error.message || 'Unknown WebSocket error'));
+                console.error('Full error:', error);
+            };
         }
+
+        function disconnect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                isManualDisconnect = true; // Set flag to skip auto-reconnect
+                logMessage('Disconnecting...');
+                ws.close(1000, 'User requested disconnect');
+                // Optional: Clear localStorage on manual disconnect
+                // localStorage.removeItem('username');
+            } else {
+                logMessage('Not connected');
+            }
+        }
+
+        // On page load: Restore from localStorage and auto-connect if username exists
+        window.onload = () => {
+            const storedUsername = localStorage.getItem('username');
+            if (storedUsername) {
+                usernameInput.value = storedUsername;
+                connect(); // Auto-connect
+            }
+        };
     </script>
 </body>
 </html>
