@@ -1,4 +1,4 @@
-module audit-notification-system
+module github.com/jerryjuche/audit-notification-system
 
 go 1.22.2
 
