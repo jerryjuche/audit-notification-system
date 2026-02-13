@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Audit Notification Client</title>
+</head>
+<body>
+    <h1>Audit Notification System</h1>
+    <label for="username">Username:</label>
+    <input id="username" type="text" placeholder="e.g., jerry">
+    <button onclick="connect()">Connect</button>
+    <p id="status">Status: Disconnected</p>
+
+    <script>
+        let ws = null;
+
+        function connect() {
+            const username = document.getElementById('username').value;
+            if (!username) {
+                alert('Enter username');
+                return;
+            }
+
+            ws = new WebSocket(`ws://localhost:8080/ws?user=${username}`);
+            ws.onopen = () => {
+                document.getElementById('status').innerText = 'Status: Connected';
+                console.log('Connected');
+            };
+            ws.onmessage = (event) => {
+                alert(`Notification: ${event.data}`); // Pop-up.
+                console.log('Received:', event.data);
+            };
+            ws.onclose = () => {
+                document.getElementById('status').innerText = 'Status: Disconnected';
+                console.log('Disconnected');
+            };
+            ws.onerror = (error) => console.error('Error:', error);
+        }
+    </script>
+</body>
+</html>
